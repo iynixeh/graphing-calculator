@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Graphing calculator</title>
+<style>
+:root{--bg:#E8EDF2;--panel:#fff;--ink:#14213D;--mute:#5B6B7F;--line:#CFD8E2;--plot:#FBFCFE;--grid:#E3EAF1;--grid2:#C9D4E0;--axis:#3A4A63;--accent:#0B6E99;--err:#B42318;
+--font:"Helvetica Neue",Helvetica,Arial,sans-serif;--mono:"Helvetica Neue",Helvetica,Arial,sans-serif;color-scheme:light;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0C1218;--panel:#131C26;--ink:#E4ECF4;--mute:#8DA0B5;--line:#263445;--plot:#0F1822;--grid:#182433;--grid2:#2A3C50;--axis:#A9BACB;--accent:#5CC0EA;--err:#FF8A80;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0C1218;--panel:#131C26;--ink:#E4ECF4;--mute:#8DA0B5;--line:#263445;--plot:#0F1822;--grid:#182433;--grid2:#2A3C50;--axis:#A9BACB;--accent:#5CC0EA;--err:#FF8A80;color-scheme:dark}
+*{box-sizing:border-box}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:15px/1.4 var(--font);display:grid;grid-template-columns:340px minmax(0,1fr)}
+aside{order:-1;background:var(--panel);border-right:1px solid var(--line);padding:18px 16px;overflow:auto;display:flex;flex-direction:column;gap:16px;min-height:0}
+h1{margin:0;font-size:19px;font-weight:600;letter-spacing:-.01em}
+.hint{margin:0;font-size:12.5px;color:var(--mute);line-height:1.55;max-width:42ch}
+#list{display:flex;flex-direction:column;gap:10px}
+.row{display:flex;align-items:flex-start;gap:8px}
+.dot{flex:none;width:22px;height:22px;margin-top:8px;border-radius:50%;border:2px solid var(--c);background:var(--c);cursor:pointer;padding:0}
+.dot.off{background:transparent}
+.field{flex:1;min-width:0}
+.in{display:flex;align-items:center;gap:6px;height:38px;padding:0 10px;border:1px solid var(--line);border-radius:0;background:var(--plot)}
+.in:focus-within{outline:2px solid var(--accent);outline-offset:1px}
+.in span{font:13px var(--mono);color:var(--mute)}
+.in input{flex:1;min-width:0;border:0;background:transparent;color:var(--ink);font:14px var(--mono);outline:none}
+.err{margin-top:4px;font-size:12px;color:var(--err)}
+.err:empty{display:none}
+.del{flex:none;width:30px;height:30px;margin-top:4px;border:0;background:none;color:var(--mute);font-size:20px;line-height:1;cursor:pointer;border-radius:0}
+.del:hover{color:var(--err)}
+.add{width:100%;padding:9px;border:1px dashed var(--line);border-radius:0;background:none;color:var(--accent);font:500 14px var(--font);cursor:pointer}
+.calc h2{margin:0 0 6px;font-size:13px;font-weight:600;color:var(--mute)}
+.out{margin-top:6px;min-height:22px;font:500 15px var(--mono)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.plot{position:relative;min-width:0;min-height:0}
+canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair;display:block}
+.tools{position:absolute;top:12px;right:12px;display:flex;gap:6px}
+.tools button{min-width:38px;height:38px;padding:0 10px;border:1px solid var(--line);border-radius:0;background:var(--panel);color:var(--ink);font:500 16px var(--font);cursor:pointer}
+.tools button.txt{font-size:13px}
+#readout{position:absolute;left:12px;bottom:12px;padding:5px 10px;border:1px solid var(--line);border-left:4px solid transparent;border-radius:0;background:var(--panel);font:12px var(--mono);pointer-events:none}
+#readout:empty{display:none}
+@media (max-width:760px){
+ body{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) auto}
+ aside{order:0;max-height:46%;border-right:0;border-top:1px solid var(--line);padding:14px}
+ .in input{font-size:16px}
+}
+</style>
+</head>
+<body>
+<aside>
+ <h1>Graphing calculator</h1>
+ <div id="list"></div>
+ <button class="add" id="add">Add function</button>
+ <div class="calc">
+  <h2>Calculate</h2>
+  <label class="in"><span>=</span><input id="calc" placeholder="2*pi^2 + sqrt(9)" spellcheck="false" autocomplete="off" aria-label="Calculate an expression"></label>
+  <div class="out" id="out"></div>
+ </div>
+ <p class="hint">Drag to pan. Scroll or pinch to zoom. Hover to trace a curve.<br>Use x, + − * / ^, 2x, sin cos tan asin acos atan sinh cosh tanh sqrt cbrt abs exp ln log floor ceil, pi, e.</p>
+</aside>
+<main class="plot" id="plot">
+ <canvas id="cv"></canvas>
+ <div class="tools">
+  <button id="zin" aria-label="Zoom in">+</button>
+  <button id="zout" aria-label="Zoom out">−</button>
+  <button id="reset" class="txt">Reset view</button>
+ </div>
+ <div id="readout"></div>
+</main>
+<script>
+(()=>{
+const NAMES={sin:Math.sin,cos:Math.cos,tan:Math.tan,asin:Math.asin,acos:Math.acos,atan:Math.atan,sinh:Math.sinh,cosh:Math.cosh,tanh:Math.tanh,sqrt:Math.sqrt,cbrt:Math.cbrt,abs:Math.abs,exp:Math.exp,ln:Math.log,log:Math.log10,floor:Math.floor,ceil:Math.ceil};
+const TOK=[...Object.keys(NAMES),'pi','x','e'].sort((a,b)=>b.length-a.length);
+
+function compile(src){
+  const s=src.toLowerCase().replace(/^\s*(y|f\(x\))\s*=/,'');
+  let p=0;
+  const fail=m=>{throw new Error(m)};
+  const pk=()=>{while(p<s.length&&/\s/.test(s[p]))p++;return s[p]||''};
+  function expr(){let l=term();for(let c;(c=pk())==='+'||c==='-';){p++;const a=l,b=term();l=c==='+'?x=>a(x)+b(x):x=>a(x)-b(x)}return l}
+  function term(){let l=unary();for(;;){const c=pk();
+    if(c==='*'||c==='/'){p++;const a=l,b=unary();l=c==='*'?x=>a(x)*b(x):x=>a(x)/b(x)}
+    else if(c&&/[0-9.a-z(]/.test(c)){const a=l,b=power();l=x=>a(x)*b(x)}
+    else break}return l}
+  function unary(){const c=pk();if(c==='-'){p++;const a=unary();return x=>-a(x)}if(c==='+'){p++;return unary()}return power()}
+  function power(){const a=primary();if(pk()==='^'){p++;const b=unary();return x=>Math.pow(a(x),b(x))}return a}
+  function primary(){
+    const c=pk();
+    if(!c)fail('The expression ends too early');
+    if(/[0-9.]/.test(c)){const m=/^(\d+\.?\d*|\.\d+)/.exec(s.slice(p));if(!m)fail('Not a valid number');p+=m[0].length;const v=parseFloat(m[0]);return()=>v}
+    if(c==='('){p++;const a=expr();if(pk()!==')')fail('Missing closing )');p++;return a}
+    if(/[a-z]/.test(c)){
+      const t=TOK.find(k=>s.startsWith(k,p));
+      if(!t)fail('Unknown name "'+/^[a-z]+/.exec(s.slice(p))[0]+'"');
+      p+=t.length;
+      if(t==='x')return x=>x;
+      if(t==='pi')return()=>Math.PI;
+      if(t==='e')return()=>Math.E;
+      if(pk()!=='(')fail('Write '+t+'(…) with brackets');
+      p++;const a=expr();if(pk()!==')')fail('Missing closing )');p++;
+      const f=NAMES[t];return x=>f(a(x));
+    }
+    fail('Unexpected "'+c+'"');
+  }
+  const f=expr();
+  if(pk())fail('Unexpected "'+pk()+'"');
+  return f;
+}
+
+// ---- state ----
+const COLORS=['#2563eb','#dc2626','#16a34a','#9333ea','#ea580c','#0891b2','#c026d3','#ca8a04'];
+const fns=[];let nextId=0;
+let cx=0,cy=0,scale=40,trace=null;
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d'),plot=$('plot'),list=$('list'),readout=$('readout');
+const root=document.documentElement;
+let W=0,H=0;
+
+const fmt=v=>{const a=Math.abs(v);return a<1e-12?'0':(a>=1e6||a<1e-4)?v.toExponential(1):String(+v.toPrecision(6))};
+const niceStep=r=>{const e=Math.pow(10,Math.floor(Math.log10(r))),m=r/e;return(m<=1?1:m<=2?2:m<=5?5:10)*e};
+const toX=x=>W/2+(x-cx)*scale, toY=y=>H/2-(y-cy)*scale;
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+// ---- function list ----
+function pickColor(){return COLORS.find(c=>!fns.some(f=>f.color===c))||COLORS[nextId%COLORS.length]}
+function setFn(f,text){
+  f.text=text;
+  try{f.fn=text.trim()?compile(text):null;f.err=''}catch(e){f.fn=null;f.err=e.message}
+}
+function addFn(text){
+  const f={id:nextId++,color:pickColor(),on:true,fn:null,err:'',text:''};
+  setFn(f,text);fns.push(f);
+  const row=document.createElement('div');row.className='row';
+  row.innerHTML='<button class="dot" aria-label="Show or hide this function"></button><div class="field"><label class="in"><span>y =</span><input spellcheck="false" autocomplete="off" aria-label="Function of x"></label><div class="err" role="status"></div></div><button class="del" aria-label="Remove function">×</button>';
+  const dot=row.querySelector('.dot'),input=row.querySelector('input'),err=row.querySelector('.err');
+  dot.style.setProperty('--c',f.color);input.value=text;err.textContent=f.err;
+  dot.onclick=()=>{f.on=!f.on;dot.classList.toggle('off',!f.on);draw()};
+  input.oninput=()=>{setFn(f,input.value);err.textContent=f.err;draw()};
+  input.onkeydown=e=>{if(e.key==='Enter'&&row===list.lastElementChild)addFn('').input.focus()};
+  row.querySelector('.del').onclick=()=>{fns.splice(fns.indexOf(f),1);row.remove();draw()};
+  list.appendChild(row);
+  return{f,input};
+}
+
+// ---- drawing ----
+function draw(){
+  if(!W||!H)return;
+  const dpr=window.devicePixelRatio||1;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  const S=getComputedStyle(root),v=n=>S.getPropertyValue(n).trim();
+  ctx.fillStyle=v('--plot');ctx.fillRect(0,0,W,H);
+  const xmin=cx-W/2/scale,xmax=cx+W/2/scale,ymin=cy-H/2/scale,ymax=cy+H/2/scale;
+  const step=niceStep(80/scale),minor=step/5;
+  ctx.lineWidth=1;
+  const lines=(d,color,vert)=>{
+    ctx.strokeStyle=color;ctx.beginPath();
+    const lo=vert?xmin:ymin,hi=vert?xmax:ymax;
+    for(let i=Math.ceil(lo/d);i*d<=hi;i++){
+      const q=Math.round(vert?toX(i*d):toY(i*d))+.5;
+      if(vert){ctx.moveTo(q,0);ctx.lineTo(q,H)}else{ctx.moveTo(0,q);ctx.lineTo(W,q)}
+    }
+    ctx.stroke();
+  };
+  lines(minor,v('--grid'),true);lines(minor,v('--grid'),false);
+  lines(step,v('--grid2'),true);lines(step,v('--grid2'),false);
+
+  const ax=toX(0),ay=toY(0);
+  ctx.strokeStyle=v('--axis');ctx.lineWidth=1.5;ctx.beginPath();
+  if(ax>=0&&ax<=W){ctx.moveTo(Math.round(ax)+.5,0);ctx.lineTo(Math.round(ax)+.5,H)}
+  if(ay>=0&&ay<=H){ctx.moveTo(0,Math.round(ay)+.5);ctx.lineTo(W,Math.round(ay)+.5)}
+  ctx.stroke();
+
+  ctx.font='12px "Helvetica Neue",Helvetica,Arial,sans-serif';
+  ctx.fillStyle=v('--axis');ctx.strokeStyle=v('--plot');ctx.lineWidth=3;ctx.lineJoin='round';
+  const label=(t,x,y)=>{ctx.strokeText(t,x,y);ctx.fillText(t,x,y)};
+  ctx.textAlign='center';
+  const ty=clamp(ay+16,14,H-6);
+  for(let i=Math.ceil(xmin/step);i*step<=xmax;i++)if(i)label(fmt(i*step),toX(i*step),ty);
+  ctx.textAlign='left';
+  const tx=clamp(ax+6,6,W-52);
+  for(let i=Math.ceil(ymin/step);i*step<=ymax;i++)if(i)label(fmt(i*step),tx,toY(i*step)-4);
+  if(ax>=0&&ax<=W&&ay>=0&&ay<=H)label('0',ax+6,ay+16);
+
+  ctx.lineWidth=2.25;ctx.lineJoin='round';ctx.lineCap='round';
+  let any=false;
+  for(const f of fns){
+    if(!f.on||!f.fn)continue;any=true;
+    ctx.strokeStyle=f.color;ctx.beginPath();
+    let pen=false,py=0;
+    for(let sx=0;sx<=W;sx+=.5){
+      const y=f.fn(cx+(sx-W/2)/scale);
+      if(!isFinite(y)){pen=false;continue}
+      const sy=clamp(toY(y),-1e5,1e5);
+      if(!pen||Math.abs(sy-py)>H*1.5)ctx.moveTo(sx,sy);else ctx.lineTo(sx,sy);
+      pen=true;py=sy;
+    }
+    ctx.stroke();
+  }
+  if(!any){ctx.fillStyle=v('--mute');ctx.textAlign='center';ctx.font='500 15px "Helvetica Neue",Helvetica,Arial,sans-serif';ctx.fillText('Add a function to start plotting',W/2,H/2-60)}
+
+  // trace
+  if(trace){
+    const x=cx+(trace.x-W/2)/scale;
+    let best=null,bd=28;
+    for(const f of fns){
+      if(!f.on||!f.fn)continue;
+      const y=f.fn(x);if(!isFinite(y))continue;
+      const d=Math.abs(toY(y)-trace.y);
+      if(d<bd){bd=d;best={y,color:f.color}}
+    }
+    if(best){
+      ctx.fillStyle=best.color;ctx.strokeStyle=v('--plot');ctx.lineWidth=2.5;
+      ctx.beginPath();ctx.arc(trace.x,toY(best.y),5.5,0,7);ctx.stroke();ctx.fill();
+      readout.textContent='('+fmt(x)+', '+fmt(best.y)+')';readout.style.borderLeftColor=best.color;
+    }else{
+      readout.textContent='('+fmt(x)+', '+fmt(cy-(trace.y-H/2)/scale)+')';readout.style.borderLeftColor='transparent';
+    }
+  }else readout.textContent='';
+}
+
+function resize(){
+  const dpr=window.devicePixelRatio||1;
+  W=plot.clientWidth;H=plot.clientHeight;
+  cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);
+  draw();
+}
+
+// ---- interaction ----
+const pos=e=>{const r=cv.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top}};
+function zoomAt(pt,f){
+  const x=cx+(pt.x-W/2)/scale,y=cy-(pt.y-H/2)/scale;
+  scale=clamp(scale*f,1e-4,1e7);
+  cx=x-(pt.x-W/2)/scale;cy=y+(pt.y-H/2)/scale;
+}
+const ptrs=new Map();
+cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,pos(e))});
+cv.addEventListener('pointermove',e=>{
+  const p=pos(e);
+  if(ptrs.has(e.pointerId)){
+    const prev=ptrs.get(e.pointerId);
+    if(ptrs.size===1){cx-=(p.x-prev.x)/scale;cy+=(p.y-prev.y)/scale}
+    else if(ptrs.size===2){
+      const o=[...ptrs].find(([id])=>id!==e.pointerId)[1];
+      const d0=Math.hypot(prev.x-o.x,prev.y-o.y),d1=Math.hypot(p.x-o.x,p.y-o.y);
+      if(d0>0)zoomAt({x:(p.x+o.x)/2,y:(p.y+o.y)/2},d1/d0);
+    }
+    ptrs.set(e.pointerId,p);
+    trace=e.pointerType==='mouse'?p:null;
+  }else if(e.pointerType==='mouse')trace=p;
+  draw();
+});
+const endPtr=e=>{ptrs.delete(e.pointerId)};
+cv.addEventListener('pointerup',endPtr);
+cv.addEventListener('pointercancel',endPtr);
+cv.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse'){trace=null;draw()}});
+cv.addEventListener('wheel',e=>{
+  e.preventDefault();
+  zoomAt(pos(e),Math.exp(-e.deltaY*(e.deltaMode===1?16:1)*.0015));
+  draw();
+},{passive:false});
+cv.addEventListener('dblclick',e=>{zoomAt(pos(e),2);draw()});
+$('zin').onclick=()=>{zoomAt({x:W/2,y:H/2},1.5);draw()};
+$('zout').onclick=()=>{zoomAt({x:W/2,y:H/2},1/1.5);draw()};
+$('reset').onclick=()=>{cx=0;cy=0;scale=40;draw()};
+$('add').onclick=()=>addFn('').input.focus();
+
+$('calc').oninput=e=>{
+  const out=$('out'),t=e.target.value;
+  if(!t.trim()){out.textContent='';return}
+  try{const r=compile(t)(0);out.style.color='';out.textContent=isFinite(r)?String(+r.toPrecision(12)):'Undefined'}
+  catch(err){out.style.color='var(--mute)';out.textContent=err.message}
+};
+
+new ResizeObserver(resize).observe(plot);
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',draw);
+new MutationObserver(draw).observe(root,{attributes:true,attributeFilter:['data-theme']});
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(draw);
+
+addFn('sin(x)');
+addFn('x^2/4 - 2');
+resize();
+})();
+</script>
+</body>
+</html>
